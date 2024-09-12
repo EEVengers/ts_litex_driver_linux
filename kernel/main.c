@@ -68,9 +68,11 @@ struct litepcie_dma_chan {
 	int64_t reader_hw_count;
 	int64_t reader_hw_count_last;
 	int64_t reader_sw_count;
+	int64_t reader_dropped_count;
 	int64_t writer_hw_count;
 	int64_t writer_hw_count_last;
 	int64_t writer_sw_count;
+	int64_t writer_dropped_count;
 	uint8_t writer_enable;
 	uint8_t reader_enable;
 	uint8_t writer_lock;
@@ -219,6 +221,7 @@ static void litepcie_dma_writer_start(struct litepcie_device *s, int chan_num)
 	dmachan->writer_hw_count = 0;
 	dmachan->writer_hw_count_last = 0;
 	dmachan->writer_sw_count = 0;
+	dmachan->writer_dropped_count = 0;
 
 	/* Start DMA Writer. */
 	litepcie_writel(s, dmachan->base + PCIE_DMA_WRITER_ENABLE_OFFSET, 1);
@@ -241,6 +244,7 @@ static void litepcie_dma_writer_stop(struct litepcie_device *s, int chan_num)
 	dmachan->writer_hw_count = 0;
 	dmachan->writer_hw_count_last = 0;
 	dmachan->writer_sw_count = 0;
+	dmachan->writer_dropped_count = 0;
 }
 
 static void litepcie_dma_reader_start(struct litepcie_device *s, int chan_num)
@@ -273,6 +277,7 @@ static void litepcie_dma_reader_start(struct litepcie_device *s, int chan_num)
 	dmachan->reader_hw_count = 0;
 	dmachan->reader_hw_count_last = 0;
 	dmachan->reader_sw_count = 0;
+	dmachan->reader_dropped_count = 0;
 
 	/* Start dma reader */
 	litepcie_writel(s, dmachan->base + PCIE_DMA_READER_ENABLE_OFFSET, 1);
@@ -295,6 +300,7 @@ static void litepcie_dma_reader_stop(struct litepcie_device *s, int chan_num)
 	dmachan->reader_hw_count = 0;
 	dmachan->reader_hw_count_last = 0;
 	dmachan->reader_sw_count = 0;
+	dmachan->reader_dropped_count = 0;
 }
 
 void litepcie_stop_dma(struct litepcie_device *s)
@@ -440,7 +446,7 @@ static ssize_t litepcie_read(struct file *file, char __user *data, size_t size, 
 {
 	size_t len;
 	int i, ret;
-	int overflows;
+	int64_t overflows;
 
 	struct litepcie_chan_priv *chan_priv = file->private_data;
 	struct litepcie_chan *chan = chan_priv->chan;
@@ -482,7 +488,10 @@ static ssize_t litepcie_read(struct file *file, char __user *data, size_t size, 
 	}
 
 	if (overflows)
-		dev_err(&s->dev->dev, "Reading too late, %d buffers lost\n", overflows);
+	{
+		dev_err(&s->dev->dev, "Reading too late, %lld buffers lost\n", overflows);
+		chan->dma.writer_dropped_count += overflows;
+	}
 
 #ifdef DEBUG_READ
 	dev_dbg(&s->dev->dev, "read: read %ld bytes out of %ld\n", size - len, size);
@@ -495,7 +504,7 @@ static ssize_t litepcie_write(struct file *file, const char __user *data, size_t
 {
 	size_t len;
 	int i, ret;
-	int underflows;
+	int64_t underflows;
 
 	struct litepcie_chan_priv *chan_priv = file->private_data;
 	struct litepcie_chan *chan = chan_priv->chan;
@@ -536,7 +545,10 @@ static ssize_t litepcie_write(struct file *file, const char __user *data, size_t
 	}
 
 	if (underflows)
-		dev_err(&s->dev->dev, "Writing too late, %d buffers lost\n", underflows);
+	{
+		dev_err(&s->dev->dev, "Writing too late, %lld buffers lost\n", underflows);
+		chan->dma.reader_dropped_count += underflows;
+	}
 
 #ifdef DEBUG_WRITE
 	dev_dbg(&s->dev->dev, "write: write %ld bytes out of %ld\n", size - len, size);
@@ -750,6 +762,7 @@ static long litepcie_ioctl(struct file *file, unsigned int cmd,
 
 		m.hw_count = chan->dma.writer_hw_count;
 		m.sw_count = chan->dma.writer_sw_count;
+		m.lost_count = chan->dma.writer_dropped_count;
 
 		if (copy_to_user((void *)arg, &m, sizeof(m))) {
 			ret = -EFAULT;
@@ -782,6 +795,7 @@ static long litepcie_ioctl(struct file *file, unsigned int cmd,
 
 		m.hw_count = chan->dma.reader_hw_count;
 		m.sw_count = chan->dma.reader_sw_count;
+		m.lost_count = chan->dma.reader_dropped_count;
 
 		if (copy_to_user((void *)arg, &m, sizeof(m))) {
 			ret = -EFAULT;

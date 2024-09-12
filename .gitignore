@@ -6,3 +6,6 @@ Module.symvers
 modules.order
 *.mod
 *.mod.c
+litepcie_test
+litepcie_util
+*.a
