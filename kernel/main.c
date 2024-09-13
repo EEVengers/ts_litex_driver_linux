@@ -469,8 +469,8 @@ static ssize_t litepcie_read(struct file *file, char __user *data, size_t size, 
 	overflows = 0;
 	len = size;
 	while (len >= DMA_BUFFER_SIZE) {
-		if ((chan->dma.writer_hw_count - chan->dma.writer_sw_count) > 0) {
-			if ((chan->dma.writer_hw_count - chan->dma.writer_sw_count) > DMA_BUFFER_COUNT/2) {
+		if ((chan->dma.writer_hw_count - chan->dma.writer_sw_count) > DMA_BUFFER_PER_IRQ) {
+			if ((chan->dma.writer_hw_count - chan->dma.writer_sw_count) > (DMA_BUFFER_COUNT - DMA_BUFFER_PER_IRQ)) {
 				overflows++;
 			} else {
 				ret = copy_to_user(data + (chan->block_size * i),
@@ -527,8 +527,8 @@ static ssize_t litepcie_write(struct file *file, const char __user *data, size_t
 	underflows = 0;
 	len = size;
 	while (len >= DMA_BUFFER_SIZE) {
-		if ((chan->dma.reader_sw_count - chan->dma.reader_hw_count) < DMA_BUFFER_COUNT/2) {
-			if ((chan->dma.reader_sw_count - chan->dma.reader_hw_count) < 0) {
+		if ((chan->dma.reader_sw_count - chan->dma.reader_hw_count) < (DMA_BUFFER_COUNT - DMA_BUFFER_PER_IRQ)) {
+			if ((chan->dma.reader_sw_count - chan->dma.reader_hw_count) < DMA_BUFFER_PER_IRQ) {
 				underflows++;
 			} else {
 				ret = copy_from_user(chan->dma.reader_addr[chan->dma.reader_sw_count%DMA_BUFFER_COUNT],
