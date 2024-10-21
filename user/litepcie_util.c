@@ -21,8 +21,8 @@
 /* Parameters */
 /*------------*/
 
-#define DMA_CHECK_DATA   /* Un-comment to disable data check */
-#define DMA_RANDOM_DATA  /* Un-comment to disable data random */
+//#define DMA_CHECK_DATA   /* Un-comment to disable data check */
+//#define DMA_RANDOM_DATA  /* Un-comment to disable data random */
 
 /* Variables */
 /*-----------*/
@@ -562,7 +562,7 @@ int main(int argc, char **argv)
         help();
 
     /* Select device. */
-    snprintf(litepcie_device, sizeof(litepcie_device), "/dev/litepcie%d", litepcie_device_num);
+    snprintf(litepcie_device, sizeof(litepcie_device), "/dev/thunderscope%d", litepcie_device_num);
 
     cmd = argv[optind++];
 
