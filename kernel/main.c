@@ -50,7 +50,7 @@
 //#define DEBUG_READ
 //#define DEBUG_WRITE
 
-#define LITEPCIE_NAME "litepcie"
+#define LITEPCIE_NAME "thunderscope"
 #define LITEPCIE_MINOR_COUNT 32
 
 #ifndef CSR_BASE
@@ -111,8 +111,13 @@ struct litepcie_chan_priv {
 	bool writer;
 };
 
+struct litepcie_minor_alloc {
+	bool inUse;
+	uint32_t pci_id;
+	uint8_t chan;
+} litepcie_minor_table[LITEPCIE_MINOR_COUNT];
+
 static int litepcie_major;
-static int litepcie_minor_idx;
 static struct class *litepcie_class;
 static dev_t litepcie_dev_t;
 
@@ -898,6 +903,38 @@ static long litepcie_ioctl(struct file *file, unsigned int cmd,
 	return ret;
 }
 
+static int litepcie_get_minor(struct litepcie_device *s, uint8_t ch)
+{
+	int i;
+
+	for(i=0; i < LITEPCIE_MINOR_COUNT; i++) {
+		if((litepcie_minor_table[i].pci_id == pci_dev_id(s->dev)) &&
+		   (litepcie_minor_table[i].chan == ch))
+		{
+		    litepcie_minor_table[i].inUse = true;
+		    return i;
+		}
+	}
+
+	for(i=0; i < LITEPCIE_MINOR_COUNT; i++) {
+		if(litepcie_minor_table[i].inUse == false)
+		{
+			litepcie_minor_table[i].chan = ch;
+			litepcie_minor_table[i].pci_id = pci_dev_id(s->dev);
+			litepcie_minor_table[i].inUse = true;
+			break;
+		}
+	}
+
+	if(i == LITEPCIE_MINOR_COUNT)
+	{
+		pr_err("No free minor values left");
+		return -1;
+	}
+
+	return i;
+}
+
 static const struct file_operations litepcie_fops = {
 	.owner = THIS_MODULE,
 	.unlocked_ioctl = litepcie_ioctl,
@@ -913,43 +950,37 @@ static int litepcie_alloc_chdev(struct litepcie_device *s)
 {
 	int i, j;
 	int ret;
-	int index;
 
-	index = litepcie_minor_idx;
-	s->minor_base = litepcie_minor_idx;
 	for (i = 0; i < s->channels; i++) {
+		s->chan[i].minor = litepcie_get_minor(s, i);
 		cdev_init(&s->chan[i].cdev, &litepcie_fops);
-		ret = cdev_add(&s->chan[i].cdev, MKDEV(litepcie_major, index), 1);
+		ret = cdev_add(&s->chan[i].cdev, MKDEV(litepcie_major, s->chan[i].minor), 1);
 		if (ret < 0) {
 			dev_err(&s->dev->dev, "Failed to allocate cdev\n");
 			goto fail_alloc;
 		}
-		index++;
 	}
 
-	index = litepcie_minor_idx;
 	for (i = 0; i < s->channels; i++) {
-		dev_info(&s->dev->dev, "Creating /dev/litepcie%d\n", index);
-		if (!device_create(litepcie_class, NULL, MKDEV(litepcie_major, index), NULL, "litepcie%d", index)) {
+		dev_info(&s->dev->dev, "Creating /dev/thunderscope%d\n", s->chan[i].minor);
+		if (!device_create(litepcie_class, &s->dev->dev, MKDEV(litepcie_major, s->chan[i].minor), NULL, "thunderscope%d", s->chan[i].minor)) {
 			ret = -EINVAL;
 			dev_err(&s->dev->dev, "Failed to create device\n");
 			goto fail_create;
 		}
-		index++;
 
 	}
 
-	litepcie_minor_idx = index;
 	return 0;
 
 fail_create:
-	index = litepcie_minor_idx;
 	for (j = 0; j < i; j++)
-		device_destroy(litepcie_class, MKDEV(litepcie_major, index++));
+		device_destroy(litepcie_class, MKDEV(litepcie_major, s->chan[i].minor));
 
 fail_alloc:
 	for (i = 0; i < s->channels; i++)
 		cdev_del(&s->chan[i].cdev);
+		litepcie_minor_table[s->chan[i].minor].inUse = false;
 
 	return ret;
 }
@@ -1215,7 +1246,7 @@ static int litepcie_pci_probe(struct pci_dev *dev, const struct pci_device_id *i
 		(resource_size_t) litepcie_dev->bar0_addr +
 		CSR_UART_XOVER_RXTX_ADDR - CSR_BASE;
 	tty_res->flags = IORESOURCE_REG;
-	litepcie_dev->uart = platform_device_register_simple("liteuart", litepcie_minor_idx, tty_res, 1);
+	litepcie_dev->uart = platform_device_register_simple("liteuart", 0, tty_res, 1);
 	if (IS_ERR(litepcie_dev->uart)) {
 		ret = PTR_ERR(litepcie_dev->uart);
 		goto fail3;
@@ -1296,7 +1327,11 @@ static int __init litepcie_module_init(void)
 		goto fail_alloc_chrdev_region;
 	}
 	litepcie_major = MAJOR(litepcie_dev_t);
-	litepcie_minor_idx = MINOR(litepcie_dev_t);
+	if(MINOR(litepcie_dev_t) != 0)
+	{
+		pr_err(" Invalid Device MINOR value %d\n", MINOR(litepcie_dev_t));
+		goto fail_alloc_chrdev_region;
+	}
 
 	ret = pci_register_driver(&litepcie_pci_driver);
 	if (ret < 0) {

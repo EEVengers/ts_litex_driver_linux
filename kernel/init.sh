@@ -49,14 +49,10 @@ fi
 insmod liteuart.ko
 
 if [ -d "/etc/udev/rules.d" ]; then
-    cp 50-thunderscope.rules /etc/udev/rules.d
+    cp 70-thunderscope.rules /etc/udev/rules.d
     udevadm control --reload
 else
     echo "Cannot install udev rules. Please install rules manually."
 fi
 
-# Change permissions on litepcie created devices.
-for i in `seq 0 16` ; do
-    chmod 666 /dev/litepcie$i > /dev/null 2>&1
-done
 

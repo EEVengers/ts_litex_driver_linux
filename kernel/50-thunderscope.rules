@@ -1,1 +1,0 @@
-KERNEL=="litepcie*",SUBSYSTEM=="pci",ATTR{vendor}=="0x10ee",ATTR{device}=="0x7024",TAG+="uaccess"
