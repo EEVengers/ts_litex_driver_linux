@@ -83,7 +83,8 @@ struct litepcie_chan {
 	struct litepcie_device *litepcie_dev;
 	struct litepcie_dma_chan dma;
 	struct cdev cdev;
-	uint32_t block_size;
+	uint32_t rd_block_size;
+	uint32_t wr_block_size;
 	uint32_t core_base;
 	wait_queue_head_t wait_rd; /* to wait for an ongoing read */
 	wait_queue_head_t wait_wr; /* to wait for an ongoing write */
@@ -175,13 +176,13 @@ static int litepcie_dma_init(struct litepcie_device *s)
 			/* allocate rd */
 			dmachan->reader_addr[j] = dmam_alloc_coherent(
 				&s->dev->dev,
-				DMA_BUFFER_SIZE,
+				DMA_RD_BUFFER_SIZE,
 				&dmachan->reader_handle[j],
 				GFP_KERNEL);
 			/* allocate wr */
 			dmachan->writer_addr[j] = dmam_alloc_coherent(
 				&s->dev->dev,
-				DMA_BUFFER_SIZE,
+				DMA_WR_BUFFER_SIZE,
 				&dmachan->writer_handle[j],
 				GFP_KERNEL);
 			/* check */
@@ -214,7 +215,7 @@ static void litepcie_dma_writer_start(struct litepcie_device *s, int chan_num)
 			DMA_LAST_DISABLE |
 #endif
 			(!(i%DMA_BUFFER_PER_IRQ == 0)) * DMA_IRQ_DISABLE | /* generate an msi */
-			DMA_BUFFER_SIZE);                                  /* every n buffers */
+			DMA_WR_BUFFER_SIZE);                                  /* every n buffers */
 		/* Fill 32-bit Address LSB. */
 		litepcie_writel(s, dmachan->base + PCIE_DMA_WRITER_TABLE_VALUE_OFFSET + 4, (dmachan->writer_handle[i] >>  0) & 0xffffffff);
 		/* Write descriptor (and fill 32-bit Address MSB for 64-bit mode). */
@@ -270,7 +271,7 @@ static void litepcie_dma_reader_start(struct litepcie_device *s, int chan_num)
 			DMA_LAST_DISABLE |
 #endif
 			(!(i%DMA_BUFFER_PER_IRQ == 0)) * DMA_IRQ_DISABLE | /* generate an msi */
-			DMA_BUFFER_SIZE);                                  /* every n buffers */
+			DMA_RD_BUFFER_SIZE);                                  /* every n buffers */
 		/* Fill 32-bit Address LSB. */
 		litepcie_writel(s, dmachan->base + PCIE_DMA_READER_TABLE_VALUE_OFFSET + 4, (dmachan->reader_handle[i] >>  0) & 0xffffffff);
 		/* Write descriptor (and fill 32-bit Address MSB for 64-bit mode). */
@@ -308,7 +309,7 @@ static void litepcie_dma_reader_stop(struct litepcie_device *s, int chan_num)
 	dmachan->reader_dropped_count = 0;
 }
 
-void litepcie_stop_dma(struct litepcie_device *s)
+static void litepcie_stop_dma(struct litepcie_device *s)
 {
 	struct litepcie_dma_chan *dmachan;
 	int i;
@@ -473,18 +474,18 @@ static ssize_t litepcie_read(struct file *file, char __user *data, size_t size, 
 	i = 0;
 	overflows = 0;
 	len = size;
-	while (len >= DMA_BUFFER_SIZE) {
+	while (len >= DMA_WR_BUFFER_SIZE) {
 		if ((chan->dma.writer_hw_count - chan->dma.writer_sw_count) > DMA_BUFFER_PER_IRQ) {
 			if ((chan->dma.writer_hw_count - chan->dma.writer_sw_count) > (DMA_BUFFER_COUNT - DMA_BUFFER_PER_IRQ)) {
 				overflows++;
 			} else {
-				ret = copy_to_user(data + (chan->block_size * i),
+				ret = copy_to_user(data + (chan->wr_block_size * i),
 						   chan->dma.writer_addr[chan->dma.writer_sw_count%DMA_BUFFER_COUNT],
-						   DMA_BUFFER_SIZE);
+						   DMA_WR_BUFFER_SIZE);
 				if (ret)
 					return -EFAULT;
 			}
-			len -= DMA_BUFFER_SIZE;
+			len -= DMA_WR_BUFFER_SIZE;
 			chan->dma.writer_sw_count += 1;
 			i++;
 		} else {
@@ -531,17 +532,17 @@ static ssize_t litepcie_write(struct file *file, const char __user *data, size_t
 	i = 0;
 	underflows = 0;
 	len = size;
-	while (len >= DMA_BUFFER_SIZE) {
+	while (len >= DMA_RD_BUFFER_SIZE) {
 		if ((chan->dma.reader_sw_count - chan->dma.reader_hw_count) < (DMA_BUFFER_COUNT - DMA_BUFFER_PER_IRQ)) {
 			if ((chan->dma.reader_sw_count - chan->dma.reader_hw_count) < DMA_BUFFER_PER_IRQ) {
 				underflows++;
 			} else {
 				ret = copy_from_user(chan->dma.reader_addr[chan->dma.reader_sw_count%DMA_BUFFER_COUNT],
-						     data + (chan->block_size * i), DMA_BUFFER_SIZE);
+						     data + (chan->rd_block_size * i), DMA_RD_BUFFER_SIZE);
 				if (ret)
 					return -EFAULT;
 			}
-			len -= DMA_BUFFER_SIZE;
+			len -= DMA_RD_BUFFER_SIZE;
 			chan->dma.reader_sw_count += 1;
 			i++;
 		} else {
@@ -570,13 +571,15 @@ static int litepcie_mmap(struct file *file, struct vm_area_struct *vma)
 	unsigned long pfn;
 	int is_tx, i;
 
-	if (vma->vm_end - vma->vm_start != DMA_BUFFER_TOTAL_SIZE)
-		return -EINVAL;
-
-	if (vma->vm_pgoff == 0)
+	if (vma->vm_pgoff == 0 && (vma->vm_end - vma->vm_start == DMA_RD_BUFFER_TOTAL_SIZE))
+	{
 		is_tx = 1;
-	else if (vma->vm_pgoff == (DMA_BUFFER_TOTAL_SIZE >> PAGE_SHIFT))
+	}
+	else if (vma->vm_pgoff == (DMA_RD_BUFFER_TOTAL_SIZE >> PAGE_SHIFT) &&
+			(vma->vm_end - vma->vm_start == DMA_WR_BUFFER_TOTAL_SIZE))
+	{
 		is_tx = 0;
+	}
 	else
 		return -EINVAL;
 
@@ -598,10 +601,21 @@ static int litepcie_mmap(struct file *file, struct vm_area_struct *vma)
 		 * Note: the memory is cached, so the user must explicitly
 		 * flush the CPU caches on architectures which require it.
 		 */
-		if (remap_pfn_range(vma, vma->vm_start + i * DMA_BUFFER_SIZE, pfn,
-				    DMA_BUFFER_SIZE, vma->vm_page_prot)) {
-			dev_err(&s->dev->dev, "mmap remap_pfn_range failed\n");
-			return -EAGAIN;
+		if(is_tx)
+		{
+			if (remap_pfn_range(vma, vma->vm_start + i * DMA_RD_BUFFER_SIZE, pfn,
+				    DMA_RD_BUFFER_SIZE, vma->vm_page_prot)) {
+				dev_err(&s->dev->dev, "mmap remap_pfn_range failed\n");
+				return -EAGAIN;
+			}
+		}
+		else
+		{
+			if (remap_pfn_range(vma, vma->vm_start + i * DMA_WR_BUFFER_SIZE, pfn,
+				    DMA_WR_BUFFER_SIZE, vma->vm_page_prot)) {
+				dev_err(&s->dev->dev, "mmap remap_pfn_range failed\n");
+				return -EAGAIN;
+			}
 		}
 	}
 
@@ -814,11 +828,11 @@ static long litepcie_ioctl(struct file *file, unsigned int cmd,
 		struct litepcie_ioctl_mmap_dma_info m;
 
 		m.dma_tx_buf_offset = 0;
-		m.dma_tx_buf_size = DMA_BUFFER_SIZE;
+		m.dma_tx_buf_size = DMA_RD_BUFFER_SIZE;
 		m.dma_tx_buf_count = DMA_BUFFER_COUNT;
 
-		m.dma_rx_buf_offset = DMA_BUFFER_TOTAL_SIZE;
-		m.dma_rx_buf_size = DMA_BUFFER_SIZE;
+		m.dma_rx_buf_offset = DMA_WR_BUFFER_TOTAL_SIZE;
+		m.dma_rx_buf_size = DMA_WR_BUFFER_SIZE;
 		m.dma_rx_buf_count = DMA_BUFFER_COUNT;
 
 		if (copy_to_user((void *)arg, &m, sizeof(m))) {
@@ -997,42 +1011,6 @@ static void litepcie_free_chdev(struct litepcie_device *s)
 	}
 }
 
-/* from stackoverflow */
-void sfind(char *string, char *format, ...)
-{
-	va_list arglist;
-
-	va_start(arglist, format);
-	vsscanf(string, format, arglist);
-	va_end(arglist);
-}
-
-struct revision {
-	int yy;
-	int mm;
-	int dd;
-};
-
-int compare_revisions(struct revision d1, struct revision d2)
-{
-	if (d1.yy < d2.yy)
-		return -1;
-	else if (d1.yy > d2.yy)
-		return 1;
-
-	if (d1.mm < d2.mm)
-		return -1;
-	else if (d1.mm > d2.mm)
-		return 1;
-	else if (d1.dd < d2.dd)
-		return -1;
-	else if (d1.dd > d2.dd)
-		return 1;
-
-	return 0;
-}
-/* from stackoverflow */
-
 static int litepcie_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	int ret = 0;
@@ -1159,7 +1137,8 @@ static int litepcie_pci_probe(struct pci_dev *dev, const struct pci_device_id *i
 
 	for (i = 0; i < litepcie_dev->channels; i++) {
 		litepcie_dev->chan[i].index = i;
-		litepcie_dev->chan[i].block_size = DMA_BUFFER_SIZE;
+		litepcie_dev->chan[i].rd_block_size = DMA_RD_BUFFER_SIZE;
+		litepcie_dev->chan[i].wr_block_size = DMA_WR_BUFFER_SIZE;
 		litepcie_dev->chan[i].minor = litepcie_dev->minor_base + i;
 		litepcie_dev->chan[i].litepcie_dev = litepcie_dev;
 		litepcie_dev->chan[i].dma.writer_lock = 0;

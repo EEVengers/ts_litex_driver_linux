@@ -73,7 +73,7 @@ static void litepcie_record(const char *device_name, const char *filename, uint3
                 break;
             /* Copy Read data to File. */
             if (filename != NULL) {
-                len = fwrite(buf_rd, 1, fmin(size - total_len, DMA_BUFFER_SIZE), fo);
+                len = fwrite(buf_rd, 1, fmin(size - total_len, DMA_WR_BUFFER_SIZE), fo);
                 total_len += len;
             }
             /* Stop when specified size is reached */
@@ -90,9 +90,9 @@ static void litepcie_record(const char *device_name, const char *filename, uint3
             i++;
             /* Print statistics. */
             printf("%10.2f %10" PRIu64 "  %8" PRIu64"\n",
-                    (double)(dma.writer_sw_count - writer_sw_count_last) * DMA_BUFFER_SIZE * 8 / ((double)duration * 1e6),
+                    (double)(dma.writer_sw_count - writer_sw_count_last) * DMA_WR_BUFFER_SIZE * 8 / ((double)duration * 1e6),
                     dma.writer_sw_count,
-                    (size > 0) ? ((dma.writer_sw_count) * DMA_BUFFER_SIZE) / 1024 / 1024 : 0);
+                    (size > 0) ? ((dma.writer_sw_count) * DMA_WR_BUFFER_SIZE) / 1024 / 1024 : 0);
             /* Update time/count. */
             last_time = get_time_ms();
             writer_sw_count_last = dma.writer_sw_count;
@@ -154,14 +154,14 @@ static void litepcie_play(const char *device_name, const char *filename, uint32_
             if (dma.reader_sw_count - dma.reader_hw_count < 0)
                 sw_underflows += (dma.reader_hw_count - dma.reader_sw_count);
             /* Read data from File and fill Write buffer */
-            len = fread(buf_wr, 1, DMA_BUFFER_SIZE, fo);
+            len = fread(buf_wr, 1, DMA_WR_BUFFER_SIZE, fo);
             if (feof(fo)) {
                 /* Rewind on end of file. */
                 current_loop += 1;
                 if (current_loop >= loops)
                     keep_running = 0;
                 rewind(fo);
-                len += fread(buf_wr + len, 1, DMA_BUFFER_SIZE - len, fo);
+                len += fread(buf_wr + len, 1, DMA_WR_BUFFER_SIZE - len, fo);
             }
         }
 
@@ -174,9 +174,9 @@ static void litepcie_play(const char *device_name, const char *filename, uint32_
             i++;
             /* Print statistics. */
             printf("%10.2f %10" PRIu64 " %10" PRIu64 " %6d %10ld\n",
-                   (double)(dma.reader_sw_count - reader_sw_count_last) * DMA_BUFFER_SIZE * 8 / ((double)duration * 1e6),
+                   (double)(dma.reader_sw_count - reader_sw_count_last) * DMA_RD_BUFFER_SIZE * 8 / ((double)duration * 1e6),
                    dma.reader_sw_count,
-                   (dma.reader_sw_count * DMA_BUFFER_SIZE) / 1024 / 1024,
+                   (dma.reader_sw_count * DMA_RD_BUFFER_SIZE) / 1024 / 1024,
                    current_loop,
                    sw_underflows);
            /* Update time/count/underflows. */

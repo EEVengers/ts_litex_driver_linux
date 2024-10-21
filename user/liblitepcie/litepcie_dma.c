@@ -94,7 +94,7 @@ int litepcie_dma_init(struct litepcie_dma_ctrl *dma, const char *device_name, ui
         /* if mmap: get it from the kernel */
         checked_ioctl(dma->fds.fd, LITEPCIE_IOCTL_MMAP_DMA_INFO, &dma->mmap_dma_info);
         if (dma->use_writer) {
-            dma->buf_rd = mmap(NULL, DMA_BUFFER_TOTAL_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+            dma->buf_rd = mmap(NULL, DMA_WR_BUFFER_TOTAL_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
                                dma->fds.fd, dma->mmap_dma_info.dma_rx_buf_offset);
             if (dma->buf_rd == MAP_FAILED) {
                 fprintf(stderr, "MMAP failed\n");
@@ -102,7 +102,7 @@ int litepcie_dma_init(struct litepcie_dma_ctrl *dma, const char *device_name, ui
             }
         }
         if (dma->use_reader) {
-            dma->buf_wr = mmap(NULL, DMA_BUFFER_TOTAL_SIZE, PROT_WRITE, MAP_SHARED,
+            dma->buf_wr = mmap(NULL, DMA_RD_BUFFER_TOTAL_SIZE, PROT_WRITE, MAP_SHARED,
                                dma->fds.fd, dma->mmap_dma_info.dma_tx_buf_offset);
             if (dma->buf_wr == MAP_FAILED) {
                 fprintf(stderr, "MMAP failed\n");
@@ -112,14 +112,14 @@ int litepcie_dma_init(struct litepcie_dma_ctrl *dma, const char *device_name, ui
     } else {
         /* else: allocate it */
         if (dma->use_writer) {
-            dma->buf_rd = calloc(1, DMA_BUFFER_TOTAL_SIZE);
+            dma->buf_rd = calloc(1, DMA_WR_BUFFER_TOTAL_SIZE);
             if (!dma->buf_rd) {
                 fprintf(stderr, "%d: alloc failed\n", __LINE__);
                 return -1;
             }
         }
         if (dma->use_reader) {
-            dma->buf_wr = calloc(1, DMA_BUFFER_TOTAL_SIZE);
+            dma->buf_wr = calloc(1, DMA_RD_BUFFER_TOTAL_SIZE);
             if (!dma->buf_wr) {
                 free(dma->buf_rd);
                 fprintf(stderr, "%d: alloc failed\n", __LINE__);
@@ -185,12 +185,12 @@ void litepcie_dma_process(struct litepcie_dma_ctrl *dma)
             dma->mmap_dma_update.sw_count = dma->writer_sw_count + dma->buffers_available_read;
             checked_ioctl(dma->fds.fd, LITEPCIE_IOCTL_MMAP_DMA_WRITER_UPDATE, &dma->mmap_dma_update);
         } else {
-            len = read(dma->fds.fd, dma->buf_rd, DMA_BUFFER_TOTAL_SIZE);
+            len = read(dma->fds.fd, dma->buf_rd, DMA_WR_BUFFER_TOTAL_SIZE);
             if (len < 0) {
                 perror("read");
                 abort();
             }
-            dma->buffers_available_read = len / DMA_BUFFER_SIZE;
+            dma->buffers_available_read = len / DMA_WR_BUFFER_SIZE;
             dma->usr_read_buf_offset = 0;
         }
     } else {
@@ -209,12 +209,12 @@ void litepcie_dma_process(struct litepcie_dma_ctrl *dma)
             checked_ioctl(dma->fds.fd, LITEPCIE_IOCTL_MMAP_DMA_READER_UPDATE, &dma->mmap_dma_update);
 
         } else {
-            len = write(dma->fds.fd, dma->buf_wr, DMA_BUFFER_TOTAL_SIZE);
+            len = write(dma->fds.fd, dma->buf_wr, DMA_RD_BUFFER_TOTAL_SIZE);
             if (len < 0) {
                 perror("write");
                 abort();
             }
-            dma->buffers_available_write = len / DMA_BUFFER_SIZE;
+            dma->buffers_available_write = len / DMA_RD_BUFFER_SIZE;
             dma->usr_write_buf_offset = 0;
         }
     } else {
@@ -227,7 +227,7 @@ char *litepcie_dma_next_read_buffer(struct litepcie_dma_ctrl *dma)
     if (!dma->buffers_available_read)
         return NULL;
     dma->buffers_available_read --;
-    char *ret = dma->buf_rd + dma->usr_read_buf_offset * DMA_BUFFER_SIZE;
+    char *ret = dma->buf_rd + dma->usr_read_buf_offset * DMA_WR_BUFFER_SIZE;
     dma->usr_read_buf_offset = (dma->usr_read_buf_offset + 1) % DMA_BUFFER_COUNT;
     return ret;
 }
@@ -237,7 +237,7 @@ char *litepcie_dma_next_write_buffer(struct litepcie_dma_ctrl *dma)
     if (!dma->buffers_available_write)
         return NULL;
     dma->buffers_available_write --;
-    char *ret = dma->buf_wr + dma->usr_write_buf_offset * DMA_BUFFER_SIZE;
+    char *ret = dma->buf_wr + dma->usr_write_buf_offset * DMA_RD_BUFFER_SIZE;
     dma->usr_write_buf_offset = (dma->usr_write_buf_offset + 1) % DMA_BUFFER_COUNT;
     return ret;
 }
