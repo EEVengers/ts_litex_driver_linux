@@ -974,13 +974,15 @@ static int litepcie_alloc_chdev(struct litepcie_device *s)
 	return 0;
 
 fail_create:
-	for (j = 0; j < i; j++)
+	for (j = 0; j < i; j++) {
 		device_destroy(litepcie_class, MKDEV(litepcie_major, s->chan[i].minor));
+	}
 
 fail_alloc:
-	for (i = 0; i < s->channels; i++)
+	for (i = 0; i < s->channels; i++) {
 		cdev_del(&s->chan[i].cdev);
 		litepcie_minor_table[s->chan[i].minor].inUse = false;
+	}
 
 	return ret;
 }
