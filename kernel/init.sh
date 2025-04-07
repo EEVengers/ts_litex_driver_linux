@@ -1,31 +1,31 @@
 #!/bin/sh
 # TODO: use udev instead
 
-# Check if litepcie module is already installed.
-FOUND=$(lsmod | grep litepcie)
+# Check if thunderscope module is already installed.
+FOUND=$(lsmod | grep thunderscope)
 if [ "$FOUND" != "" ] ; then
-    echo "litepcie module already installed."
+    echo "thunderscope module already installed."
     exit 0
 fi
 
-# Install litepcie module.
-INS=$(insmod litepcie.ko 2>&1)
+# Install thunderscope module.
+INS=$(insmod thunderscope.ko 2>&1)
 if [ "$?" != "0" ] ; then
-    ERR=$(echo $INS | sed -s "s/.*litepcie.ko: //")
+    ERR=$(echo $INS | sed -s "s/.*thunderscope.ko: //")
     case $ERR in
     'Invalid module format')
         set -e
         echo "Kernel may have changed, try to rebuild module"
         make -s clean
         make -s
-        insmod litepcie.ko
+        insmod thunderscope.ko
         set +e
         ;;
     'No such file or directory')
         set -e
         echo "Module not compiled"
         make -s
-        insmod litepcie.ko
+        insmod thunderscope.ko
         set +e
         ;;
     'Required key not available')
