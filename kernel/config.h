@@ -13,11 +13,10 @@
 #include "soc.h"
 
 /* PCIe PHY Vendor IDs */
-#define PCIE_XILINX_VENDOR_ID  0x10ee
+#define PCIE_EEVENGERS_VENDOR_ID  0x20A7
 
 /* PCIe PHY Device IDs */
-/* Xilinx */
-#define PCIE_XILINX_DEVICE_ID_S7_GEN2_X4   0x7024
+#define PCIE_THUNDERSCOPE_DEVICE_ID   0x0101
 
 /* /!\ Keep in sync with csr.h  /!\ */
 
