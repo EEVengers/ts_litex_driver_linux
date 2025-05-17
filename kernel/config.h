@@ -10,7 +10,6 @@
 
 #ifndef __HW_CONFIG_H
 #define __HW_CONFIG_H
-#include "soc.h"
 
 /* PCIe PHY Vendor IDs */
 #define PCIE_EEVENGERS_VENDOR_ID  0x20A7
@@ -23,6 +22,12 @@
 /* DMA Flags */
 #define DMA_IRQ_DISABLE  (1<<24)
 #define DMA_LAST_DISABLE (1<<25)
+
+/* From soc.h */
+#define DMA_CHANNELS 1
+#define DMA_ADDR_WIDTH 64
+#define PCIE_DMA0_READER_INTERRUPT 0
+#define PCIE_DMA0_WRITER_INTERRUPT 1
 
 #define DMA_CHANNEL_COUNT      DMA_CHANNELS
 #define DMA_BUFFER_PER_IRQ     32

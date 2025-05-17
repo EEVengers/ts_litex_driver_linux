@@ -5,6 +5,7 @@
  * This file is part of LitePCIe.
  *
  * Copyright (C) 2018-2023 / EnjoyDigital  / florent@enjoy-digital.fr
+ * Copyright (C) 2025 / Nate Meyer  / nate.devel@gmail.com
  *
  */
 
@@ -42,7 +43,6 @@
 #include "csr.h"
 #include "config.h"
 #include "flags.h"
-#include "soc.h"
 
 //#define DEBUG_CSR
 //#define DEBUG_MSI
@@ -98,7 +98,7 @@ struct litepcie_device {
 	resource_size_t bar0_size;
 	phys_addr_t bar0_phys_addr;
 	uint8_t *bar0_addr; /* virtual address of BAR0 */
-	struct litepcie_chan chan[DMA_CHANNEL_COUNT];
+	struct litepcie_chan chan[DMA_CHANNELS];
 	spinlock_t lock;
 	int minor_base;
 	int irqs;
