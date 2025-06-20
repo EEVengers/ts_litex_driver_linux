@@ -9,3 +9,4 @@ modules.order
 litepcie_test
 litepcie_util
 *.a
+.vscode
