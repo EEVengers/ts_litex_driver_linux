@@ -1,0 +1,2 @@
+ACTION=="add",KERNEL=="thunderscope[0-9]*",SUBSYSTEM=="thunderscope",TAG+="uaccess"
+ACTION=="add",KERNEL=="thunderscope[0-9]*",SUBSYSTEM=="thunderscope",ENV{ID_PATH_TAG}!="",SYMLINK+="thunderscope/by-path/eevengers_ts-$env{ID_PATH_TAG}"

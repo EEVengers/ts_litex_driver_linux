@@ -1,23 +1,43 @@
 # Makefile for kernel module
+
+ifneq ($(KERNELRELEASE),)
+
+obj-m = thunderscope.o
+thunderscope-y = main.o
+
+else
+
 KERNEL_VERSION:=$(shell uname -r)
-KERNEL_PATH?=/lib/modules/$(KERNEL_VERSION)/build
+KDIR?=/lib/modules/$(KERNEL_VERSION)/build
 ARCH?=$(shell uname -m)
 
-obj-m = litepcie.o liteuart.o
-litepcie-objs = main.o
-#liteuart-objs = liteuart.o
+.PHONY: all clean load unload install
+default: all
 
+all: thunderscope.ko
 
-all: litepcie.ko liteuart.ko
+thunderscope.ko: main.c
+	@make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) M=$(shell pwd) modules
 
-litepcie.ko: main.c
-	make -C $(KERNEL_PATH) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) M=$(shell pwd) modules
-
-litepcie.ko: litepcie.h config.h flags.h csr.h soc.h
-
-liteuart.ko: liteuart.c
-	make -C $(KERNEL_PATH) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) M=$(shell pwd) modules
+thunderscope.ko: litepcie.h config.h flags.h csr.h
 
 clean:
-	make -C $(KERNEL_PATH) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) M=$(shell pwd) clean
-	rm -f *~
+	@make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) M=$(shell pwd) clean
+	@rm -f *~
+
+load: install
+	@rmmod thunderscope || true
+	@insmod thunderscope.ko
+
+unload:
+	@rmmod thunderscope || true
+
+install: thunderscope.ko
+	@make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) M=$(shell pwd) modules_install
+
+udev-install:
+	@cp 70-thunderscope.rules /etc/udev/rules.d && \
+	udevadm control --reload-rules && udevadm trigger
+
+
+endif

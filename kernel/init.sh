@@ -1,37 +1,31 @@
 #!/bin/sh
 # TODO: use udev instead
 
-# Check if litepcie module is already installed.
-FOUND=$(lsmod | grep litepcie)
+# Check if thunderscope module is already installed.
+FOUND=$(lsmod | grep thunderscope)
 if [ "$FOUND" != "" ] ; then
-    echo "litepcie module already installed."
+    echo "thunderscope module already installed."
     exit 0
 fi
 
-# Automatically remove liteuart module if installed.
-FOUND=$(lsmod | grep liteuart)
-if [ "$FOUND" != "" ] ; then
-    rmmod liteuart.ko
-fi
-
-# Install litepcie module.
-INS=$(insmod litepcie.ko 2>&1)
+# Install thunderscope module.
+INS=$(insmod thunderscope.ko 2>&1)
 if [ "$?" != "0" ] ; then
-    ERR=$(echo $INS | sed -s "s/.*litepcie.ko: //")
+    ERR=$(echo $INS | sed -s "s/.*thunderscope.ko: //")
     case $ERR in
     'Invalid module format')
         set -e
         echo "Kernel may have changed, try to rebuild module"
         make -s clean
         make -s
-        insmod litepcie.ko
+        insmod thunderscope.ko
         set +e
         ;;
     'No such file or directory')
         set -e
         echo "Module not compiled"
         make -s
-        insmod litepcie.ko
+        insmod thunderscope.ko
         set +e
         ;;
     'Required key not available')
@@ -45,11 +39,11 @@ if [ "$?" != "0" ] ; then
     esac
 fi
 
-# Install liteuart module.
-insmod liteuart.ko
+if [ -d "/etc/udev/rules.d" ]; then
+    cp 70-thunderscope.rules /etc/udev/rules.d
+    udevadm control --reload
+else
+    echo "Cannot install udev rules. Please install rules manually."
+fi
 
-# Change permissions on litepcie created devices.
-for i in `seq 0 16` ; do
-    chmod 666 /dev/litepcie$i > /dev/null 2>&1
-done
 
