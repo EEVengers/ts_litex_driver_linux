@@ -26,6 +26,7 @@ void litepcie_dma_set_loopback(int fd, uint8_t loopback_enable) {
 void litepcie_dma_writer(int fd, uint8_t enable, int64_t *hw_count, int64_t *sw_count, int64_t *lost_count) {
     struct litepcie_ioctl_dma_writer m;
     m.enable = enable;
+    m.interrupt_count = DMA_BUFFER_PER_IRQ;
     checked_ioctl(fd, LITEPCIE_IOCTL_DMA_WRITER, &m);
     *hw_count = m.hw_count;
     *sw_count = m.sw_count;
@@ -35,6 +36,7 @@ void litepcie_dma_writer(int fd, uint8_t enable, int64_t *hw_count, int64_t *sw_
 void litepcie_dma_reader(int fd, uint8_t enable, int64_t *hw_count, int64_t *sw_count, int64_t *lost_count) {
     struct litepcie_ioctl_dma_reader m;
     m.enable = enable;
+    m.interrupt_count = DMA_BUFFER_PER_IRQ;
     checked_ioctl(fd, LITEPCIE_IOCTL_DMA_READER, &m);
     *hw_count = m.hw_count;
     *sw_count = m.sw_count;
